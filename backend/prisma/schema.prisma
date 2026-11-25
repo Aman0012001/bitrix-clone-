@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+  LEFT
+}
+
+model User {
+  id                 String               @id @default(uuid()) @db.Uuid
+  name               String
+  email              String               @unique @db.VarChar(320)
+  passwordHash       String
+  avatar             String?
+  status             UserStatus           @default(ACTIVE)
+  emailVerifiedAt    DateTime?            @db.Timestamptz(6)
+  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+  memberships        OrganizationMember[]
+  ownedOrganizations Organization[]       @relation("OrganizationOwner")
+  refreshTokens      RefreshToken[]
+
+  @@index([status])
+}
+
+model Organization {
+  id           String               @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String               @unique @db.VarChar(63)
+  ownerUserId  String               @db.Uuid
+  status       OrganizationStatus   @default(ACTIVE)
+  deletedAt    DateTime?            @db.Timestamptz(6)
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
+  owner        User                 @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  members      OrganizationMember[]
+  roles        Role[]
+  activeTokens RefreshToken[]       @relation("RefreshTokenActiveOrganization")
+
+  @@index([ownerUserId])
+  @@index([status, deletedAt])
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  roleId         String           @db.Uuid
+  status         MembershipStatus @default(ACTIVE)
+  joinedAt       DateTime         @default(now()) @db.Timestamptz(6)
+  leftAt         DateTime?        @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role           Role             @relation(fields: [organizationId, roleId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, userId])
+  @@unique([organizationId, id])
+  @@index([userId, status])
+  @@index([organizationId, roleId])
+  @@index([organizationId, status])
+}
+
+model Role {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  name           String
+  slug           String
+  description    String?
+  isSystem       Boolean              @default(false)
+  createdAt      DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @db.Timestamptz(6)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  members        OrganizationMember[]
+  permissions    RolePermission[]
+
+  @@unique([organizationId, slug])
+  @@unique([organizationId, id])
+  @@index([organizationId, isSystem])
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
+  roleGrants  RolePermission[]
+
+  @@unique([module, action])
+  @@index([module])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model RefreshToken {
+  id                   String        @id @default(uuid()) @db.Uuid
+  userId               String        @db.Uuid
+  activeOrganizationId String?       @db.Uuid
+  tokenHash            String        @unique @db.Char(64)
+  familyId             String        @db.Uuid
+  replacedByTokenId    String?       @unique @db.Uuid
+  expiresAt            DateTime      @db.Timestamptz(6)
+  revokedAt            DateTime?     @db.Timestamptz(6)
+  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganization   Organization? @relation("RefreshTokenActiveOrganization", fields: [activeOrganizationId], references: [id], onDelete: SetNull)
+  replacedBy           RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces             RefreshToken? @relation("RefreshTokenRotation")
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([familyId, revokedAt])
+  @@index([activeOrganizationId])
+  @@index([expiresAt])
+}

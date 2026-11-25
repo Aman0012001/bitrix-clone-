@@ -1,0 +1,23 @@
+{
+  "name": "businesshub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BusinessHub multi-tenant business management platform",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace @businesshub/frontend",
+    "dev:backend": "npm run dev --workspace @businesshub/backend",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "dependencies": {
+    "@neon/config": "^1.14.7",
+    "@neon/env": "^2.1.10"
+  }
+}
